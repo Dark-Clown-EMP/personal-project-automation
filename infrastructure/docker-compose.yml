@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  # 1. Database (The Vault)
+  postgres:
+    image: postgres:15-alpine
+    container_name: bank-postgres
+    environment:
+      POSTGRES_USER: db_user
+      POSTGRES_PASSWORD: db_password
+      POSTGRES_DB: payment_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck: # Added this so Keycloak waits for DB to be ready
+      test: ["CMD-SHELL", "pg_isready -U db_user -d payment_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Message Broker (RabbitMQ)
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: bank-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  # 3. Identity Provider (Keycloak)
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0.0
+    container_name: bank-keycloak
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/payment_db
+      KC_DB_USERNAME: db_user
+      KC_DB_PASSWORD: db_password
+      # --- NEW CONFIG END ---
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
